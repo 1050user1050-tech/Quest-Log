@@ -2451,7 +2451,7 @@ export default function App() {
                         <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg">
                           <p className="text-[9px] text-indigo-300 leading-relaxed font-medium">
                             <Info className="w-3 h-3 inline mr-1" />
-                            {t.labels.linuxHelp}
+                            {t.labels.desktopHelp}
                           </p>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

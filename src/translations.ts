@@ -114,7 +114,7 @@ export interface TranslationSchema {
     exportData: string;
     importData: string;
     autoSave: string;
-    linuxHelp: string;
+    desktopHelp: string;
   };
   messages: {
     welcome: string;
@@ -270,7 +270,7 @@ export const translations: Record<Language, TranslationSchema> = {
       exportData: "Download Backup File",
       importData: "Restore from File",
       autoSave: "Auto-save enabled (Local Storage)",
-      linuxHelp: "How to run on Linux Mint: 1. Click the menu (three dots) and choose 'Export to GitHub/ZIP'. 2. Extract the file to your Home or Documents folder. 3. Open terminal in the folder and type: bash questlog-linux.sh"
+      desktopHelp: "Local usage: 1. Click menu (three dots) -> 'Export to GitHub/ZIP'. 2. Extract files. 3. Run 'questlog-windows.bat' (Windows) or 'python3 questlog-launcher.py' (Linux)."
     },
     messages: {
       welcome: "WELCOME TO QUESTLOG",
@@ -424,7 +424,7 @@ export const translations: Record<Language, TranslationSchema> = {
       exportData: "Baixar Arquivo de Backup",
       importData: "Restaurar de Arquivo",
       autoSave: "Auto-salvamento ativado (Local Storage)",
-      linuxHelp: "Como rodar no Linux Mint: 1. Clique nos três pontos (menu) e escolha 'Export to GitHub/ZIP'. 2. Extraia o arquivo para sua pasta Pessoal (Home) ou Documentos. 3. Abra o terminal na pasta e digite: bash questlog-linux.sh"
+      desktopHelp: "Uso Local: 1. Clique no menu (três pontos) -> 'Export to GitHub/ZIP'. 2. Extraia os arquivos. 3. Execute 'questlog-windows.bat' (Windows) ou 'python3 questlog-launcher.py' (Linux)."
     },
     messages: {
       welcome: "BEM-VINDO AO QUESTLOG",
@@ -578,7 +578,7 @@ export const translations: Record<Language, TranslationSchema> = {
       exportData: "Descargar Archivo de Respaldo",
       importData: "Restaurar desde Archivo",
       autoSave: "Autoguardado activado (Local Storage)",
-      linuxHelp: "Cómo ejecutar en Linux Mint: 1. Haz clic en el menú (tres puntos) y elige 'Export to GitHub/ZIP'. 2. Extrae el archivo en tu Carpeta Personal (Home) o Documentos. 3. Abre la terminal en la carpeta y escribe: bash questlog-linux.sh"
+      desktopHelp: "Uso Local: 1. Haz clic en el menú (tres puntos) -> 'Export to GitHub/ZIP'. 2. Extrae los archivos. 3. Ejecuta 'questlog-windows.bat' (Windows) o 'python3 questlog-launcher.py' (Linux)."
     },
     messages: {
       welcome: "BIENVENIDO A QUESTLOG",
