@@ -25,11 +25,11 @@ export interface Task {
   money: number;
   difficulty: Difficulty;
   priority: Priority;
-  tags: string[];
   completed: boolean;
   completedAt?: number;
   dueDate?: string; // ISO string YYYY-MM-DD
   staminaCost?: number;
+  description?: string;
   isRepeating?: boolean;
   repeatInterval?: number; // Days
 }
@@ -97,7 +97,6 @@ export interface DungeonTask {
   completedAt?: number;
   xp: number;
   money: number;
-  tags: string[];
 }
 
 export interface DungeonRoom {

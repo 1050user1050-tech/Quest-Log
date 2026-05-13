@@ -16,7 +16,6 @@ import {
   Zap, 
   ChevronRight, 
   CheckCircle2, 
-  Tag,
   AlertCircle,
   Package,
   Trash2,
@@ -42,6 +41,7 @@ import {
   Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { translations, Language, TranslationSchema } from './translations';
 import { 
   Task, 
   StoreItem, 
@@ -54,7 +54,9 @@ import {
   LevelConfig,
   Dungeon,
   DungeonRoom,
-  DungeonTask
+  DungeonTask,
+  Title,
+  ActiveBuff
 } from './types';
 
 // Constants
@@ -130,10 +132,10 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 // Initial Mock Data
 const INITIAL_TASKS: Task[] = [
-  { id: '1', name: 'Morning Exercise', xp: 50, areaXP: { Health: 50 }, money: 10, difficulty: 'Easy', priority: 'Medium', tags: ['Health'], completed: false, dueDate: new Date().toISOString().split('T')[0], staminaCost: 20 },
-  { id: '2', name: 'Read for 30 minutes', xp: 100, areaXP: { Work: 100 }, money: 20, difficulty: 'Medium', priority: 'Low', tags: ['Learning'], completed: false, staminaCost: 10 },
-  { id: '3', name: 'Coffee with Friends', xp: 150, areaXP: { Social: 150 }, money: 20, difficulty: 'Medium', priority: 'Low', tags: ['Social'], completed: false, staminaCost: 5 },
-  { id: '4', name: 'Deep Sleep Mastery', xp: 100, areaXP: { Sleep: 100 }, money: 150, difficulty: 'Hard', priority: 'High', tags: ['Sleep'], completed: false, staminaCost: -20 },
+  { id: '1', name: 'Morning Exercise', xp: 50, areaXP: { Health: 50 }, money: 10, difficulty: 'Easy', priority: 'Medium', completed: false, dueDate: new Date().toISOString().split('T')[0], staminaCost: 20 },
+  { id: '2', name: 'Read for 30 minutes', xp: 100, areaXP: { Work: 100 }, money: 20, difficulty: 'Medium', priority: 'Low', completed: false, staminaCost: 10 },
+  { id: '3', name: 'Coffee with Friends', xp: 150, areaXP: { Social: 150 }, money: 20, difficulty: 'Medium', priority: 'Low', completed: false, staminaCost: 5 },
+  { id: '4', name: 'Deep Sleep Mastery', xp: 100, areaXP: { Sleep: 100 }, money: 150, difficulty: 'Hard', priority: 'High', completed: false, staminaCost: -20 },
 ];
 
 const INITIAL_STORE: StoreItem[] = [
@@ -197,6 +199,12 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'questlog' | 'store' | 'manager' | 'profile' | 'calendar' | 'titles' | 'inventory' | 'dungeons'>('questlog');
   const [managerSubTab, setManagerSubTab] = useState<'tasks' | 'dungeons' | 'xp' | 'achievements' | 'store' | 'areas' | 'titles'>('tasks');
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem('ql_language');
+    return (saved as Language) || 'pt';
+  });
+
+  const t = translations[language];
   const [titles, setTitles] = useState<Title[]>(() => {
     const saved = localStorage.getItem('ql_titles');
     const defaultTitles: Title[] = [
@@ -213,7 +221,6 @@ export default function App() {
     difficulty: 'All',
     priority: 'All',
     status: 'Active',
-    tags: 'All',
     search: '',
     showDungeonTasks: false
   });
@@ -222,6 +229,21 @@ export default function App() {
   const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(null);
   const [editingArea, setEditingArea] = useState<AreaDefinition | null>(null);
   const [notifications, setNotifications] = useState<{ id: string; message: string; type: 'level' | 'achievement' }[]>([]);
+
+  useEffect(() => {
+    // Daily Stamina Reset Logic
+    const lastResetDate = localStorage.getItem('ql_last_stamina_reset');
+    const today = new Date().toISOString().split('T')[0];
+
+    if (lastResetDate !== today) {
+      setUserStats(prev => ({
+        ...prev,
+        stamina: { ...prev.stamina, current: 100 }
+      }));
+      localStorage.setItem('ql_last_stamina_reset', today);
+      addNotification(t.messages.staminaRestored, 'achievement');
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('ql_tasks', JSON.stringify(tasks));
@@ -242,6 +264,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ql_dungeons', JSON.stringify(dungeons));
   }, [dungeons]);
+
+  useEffect(() => {
+    localStorage.setItem('ql_language', language);
+  }, [language]);
 
   useEffect(() => {
     localStorage.setItem('ql_stats', JSON.stringify(userStats));
@@ -383,12 +409,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    tasks.forEach(t => t.tags?.forEach(tag => tags.add(tag)));
-    return Array.from(tags).sort();
-  }, [tasks]);
-
   const filteredTasks = useMemo(() => {
     const priorityOrder: Record<string, number> = { Urgent: 4, High: 3, Medium: 2, Low: 1, None: 0 };
 
@@ -424,9 +444,8 @@ export default function App() {
         taskFilters.status === 'All' || 
         (taskFilters.status === 'Active' && !task.completed) || 
         (taskFilters.status === 'Completed' && task.completed);
-      const matchTags = taskFilters.tags === 'All' || task.tags?.includes(taskFilters.tags);
       
-      return matchSearch && matchDifficulty && matchPriority && matchStatus && matchTags;
+      return matchSearch && matchDifficulty && matchPriority && matchStatus;
     }).sort((a, b) => {
       // Sort by priority first
       const pA = priorityOrder[a.priority || 'None'] || 0;
@@ -439,9 +458,9 @@ export default function App() {
   }, [tasks, taskFilters, dungeons]);
 
   // Actions
-  const addNotification = (message: string, type: 'level' | 'achievement') => {
+  const addNotification = (message: string, type: 'level' | 'achievement' | 'error') => {
     const id = Math.random().toString(36).substring(7);
-    setNotifications(prev => [...prev, { id, message, type }]);
+    setNotifications(prev => [...prev, { id, message, type: type as any }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
@@ -514,7 +533,6 @@ export default function App() {
         task = { 
           ...dTask, 
           priority: 'None', 
-          tags: dTask.tags || [],
           completed: dTask.completed,
           name: dTask.name 
         } as Task;
@@ -713,43 +731,43 @@ export default function App() {
         <div className="flex-1 px-4 space-y-2">
           <SidebarLink 
             icon={<ListTodo className="w-5 h-5" />} 
-            label="Quest Log" 
+            label={t.tabs.questlog} 
             active={activeTab === 'questlog'} 
             onClick={() => setActiveTab('questlog')} 
           />
           <SidebarLink 
             icon={<CalendarIcon className="w-5 h-5" />} 
-            label="Calendar" 
+            label={t.tabs.calendar} 
             active={activeTab === 'calendar'} 
             onClick={() => setActiveTab('calendar')} 
           />
           <SidebarLink 
             icon={<Medal className="w-5 h-5" />} 
-            label="Titles & Curses" 
+            label={t.tabs.titles} 
             active={activeTab === 'titles'} 
             onClick={() => setActiveTab('titles')} 
           />
           <SidebarLink 
             icon={<Package className="w-5 h-5" />} 
-            label="Inventory" 
+            label={t.tabs.inventory} 
             active={activeTab === 'inventory'} 
             onClick={() => setActiveTab('inventory')} 
           />
           <SidebarLink 
             icon={<Store className="w-5 h-5" />} 
-            label="Black Market" 
+            label={t.tabs.store} 
             active={activeTab === 'store'} 
             onClick={() => setActiveTab('store')} 
           />
           <SidebarLink 
             icon={<UserIcon className="w-5 h-5" />} 
-            label="Hero Profile" 
+            label={t.tabs.profile} 
             active={activeTab === 'profile'} 
             onClick={() => setActiveTab('profile')} 
           />
           <SidebarLink 
             icon={<Sword className="w-5 h-5" />} 
-            label="Dungeons" 
+            label={t.tabs.dungeons} 
             active={activeTab === 'dungeons'} 
             onClick={() => setActiveTab('dungeons')} 
           />
@@ -757,7 +775,7 @@ export default function App() {
             <div className="h-px bg-white/5 mx-2 mb-4" />
             <SidebarLink 
               icon={<Settings className="w-5 h-5" />} 
-              label="Manager Tool" 
+              label={t.tabs.manager} 
               active={activeTab === 'manager'} 
               onClick={() => setActiveTab('manager')} 
             />
@@ -821,16 +839,16 @@ export default function App() {
         <header className="sticky top-0 z-10 px-8 py-6 flex items-center justify-between bg-black/10 backdrop-blur-md border-b border-white/10">
           <div className="space-y-0.5">
             <h2 className="text-2xl font-bold text-white capitalize leading-tight">
-              {activeTab === 'questlog' && 'Quests Ativas'}
-              {activeTab === 'calendar' && 'Calendário de Missões'}
-              {activeTab === 'titles' && 'Títulos & Maldições'}
-              {activeTab === 'inventory' && 'Meu Inventário'}
-              {activeTab === 'store' && 'Loja de Buffs'}
-              {activeTab === 'profile' && 'Perfil de Herói'}
-              {activeTab === 'dungeons' && 'Dungeons & Projetos'}
-              {activeTab === 'manager' && 'Gerenciador do System'}
+              {activeTab === 'questlog' && t.tabs.questlog}
+              {activeTab === 'calendar' && t.tabs.calendar}
+              {activeTab === 'titles' && t.tabs.titles}
+              {activeTab === 'inventory' && t.tabs.inventory}
+              {activeTab === 'store' && t.tabs.store}
+              {activeTab === 'profile' && t.tabs.profile}
+              {activeTab === 'dungeons' && t.tabs.dungeons}
+              {activeTab === 'manager' && t.tabs.manager}
             </h2>
-            <p className="text-xs text-slate-400 uppercase tracking-widest font-medium">BEM-VINDO AO QUESTLOG</p>
+            <p className="text-xs text-slate-400 uppercase tracking-widest font-medium">{t.messages.welcome}</p>
           </div>
           <div className="flex items-center gap-4">
             {activeTab === 'questlog' && (
@@ -839,7 +857,7 @@ export default function App() {
                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-indigo-600/20"
               >
                 <Plus className="w-4 h-4" />
-                Nova Tarefa
+                {t.actions.create}
               </button>
             )}
             <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 cursor-pointer backdrop-blur-sm transition-colors">
@@ -867,83 +885,83 @@ export default function App() {
                 {/* Filters Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Search Quest</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">{t.labels.searchQuest}</label>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                       <input 
                         type="text" 
-                        placeholder="Pesquisar..." 
-                        value={taskFilters.search}
+                        placeholder={t.labels.searchQuest}
+                        value={taskFilters.search ?? ''} 
                         onChange={(e) => setTaskFilters(prev => ({ ...prev, search: e.target.value }))}
                         className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700" 
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Status</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">{t.labels.status}</label>
                     <select 
-                      value={taskFilters.status}
+                      value={taskFilters.status ?? 'All'} 
                       onChange={(e) => setTaskFilters(prev => ({ ...prev, status: e.target.value }))}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white cursor-pointer hover:border-white/20 transition-all outline-none appearance-none font-bold"
                     >
-                      <option value="All">Todos os Status</option>
-                      <option value="Active">Apenas Ativas</option>
-                      <option value="Completed">Já Concluídas</option>
+                      <option value="All">{t.statusNames.all}</option>
+                      <option value="Active">{t.statusNames.active}</option>
+                      <option value="Completed">{t.statusNames.completed}</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Rank</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">{t.labels.rank}</label>
                     <select 
-                      value={taskFilters.difficulty}
+                      value={taskFilters.difficulty ?? 'All'} 
                       onChange={(e) => setTaskFilters(prev => ({ ...prev, difficulty: e.target.value }))}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white cursor-pointer hover:border-white/20 transition-all outline-none appearance-none font-bold"
                     >
-                      <option value="All">Todos os Ranks</option>
-                      <option value="Easy">Easy (Noob)</option>
-                      <option value="Medium">Medium (Adept)</option>
-                      <option value="Hard">Hard (Expert)</option>
-                      <option value="Elite">Elite (Legend)</option>
+                      <option value="All">{t.statusNames.all}</option>
+                      <option value="Easy">{t.rankNames.easy}</option>
+                      <option value="Medium">{t.rankNames.medium}</option>
+                      <option value="Hard">{t.rankNames.hard}</option>
+                      <option value="Elite">{t.rankNames.elite}</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Priority</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">{t.labels.priority}</label>
                     <select 
-                      value={taskFilters.priority}
+                      value={taskFilters.priority ?? 'All'} 
                       onChange={(e) => setTaskFilters(prev => ({ ...prev, priority: e.target.value }))}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white cursor-pointer hover:border-white/20 transition-all outline-none appearance-none font-bold"
                     >
-                      <option value="All">Todas as Prioridades</option>
-                      <option value="Urgent">Urgent</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                      <option value="None">None</option>
+                      <option value="All">{t.statusNames.all}</option>
+                      <option value="Urgent">{t.priorityNames.urgent}</option>
+                      <option value="High">{t.priorityNames.high}</option>
+                      <option value="Medium">{t.priorityNames.medium}</option>
+                      <option value="Low">{t.priorityNames.low}</option>
+                      <option value="None">{t.priorityNames.none}</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Dungeon Quests</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">{t.labels.showDungeonTasks}</label>
                     <div className="flex items-center gap-3 bg-black/40 border border-white/10 rounded-xl px-4 py-2 hover:border-white/20 transition-all cursor-pointer h-[38px]" onClick={() => setTaskFilters(prev => ({ ...prev, showDungeonTasks: !prev.showDungeonTasks }))}>
                        <input type="checkbox" checked={taskFilters.showDungeonTasks} onChange={() => {}} className="w-4 h-4 accent-indigo-500 pointer-events-none" />
-                       <span className="text-[10px] font-bold text-white uppercase">Show Dungeon Tasks</span>
+                       <span className="text-[10px] font-bold text-white uppercase">{t.labels.showDungeonTasks}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden">
                   <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
-                    <h3 className="font-bold text-lg text-white">Resultados da Busca ({filteredTasks.length})</h3>
+                    <h3 className="font-bold text-lg text-white">{t.messages.searchResults} ({filteredTasks.length})</h3>
                     <div className="flex gap-2 text-xs text-slate-400">
                        Filtrado por: {taskFilters.status}, {taskFilters.difficulty}
                     </div>
                   </div>
                   <div className="divide-y divide-white/5">
                     {filteredTasks.map(task => (
-                      <TaskRow key={task.id} task={task} onComplete={() => completeTask(task.id)} />
+                      <TaskRow key={task.id} task={task} t={t} onComplete={() => completeTask(task.id)} />
                     ))}
                     {filteredTasks.length === 0 && (
                       <div className="p-12 text-center text-gray-500">
                         <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                        <p>Nenhuma quest encontrada com esses filtros. Tente expandir seu rank de caça.</p>
+                        <p>{t.messages.noQuestsFound} {t.messages.noQuestsDesc}</p>
                       </div>
                     )}
                   </div>
@@ -951,7 +969,7 @@ export default function App() {
 
                 {taskFilters.status === 'Active' && tasks.filter(t => t.completed).length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="font-bold text-white pt-4 uppercase text-xs tracking-widest">Objetivos Concluídos (Recentemente)</h3>
+                    <h3 className="font-bold text-white pt-4 uppercase text-xs tracking-widest">{t.messages.completedRecently}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {tasks.filter(t => t.completed).slice(-4).reverse().map(task => (
                         <CompletedTaskCard key={task.id} task={task} />
@@ -983,8 +1001,8 @@ export default function App() {
                   {dungeons.length === 0 && (
                     <div className="md:col-span-2 p-20 text-center border-2 border-dashed border-white/10 rounded-3xl bg-white/[0.02]">
                        <Sword className="w-16 h-16 mx-auto mb-6 text-slate-700 opacity-50" />
-                       <h3 className="text-xl font-bold text-white mb-2">Sem Dungeons Ativas</h3>
-                       <p className="text-slate-400">Use o Manager Tool para criar grandes projetos e expedições.</p>
+                       <h3 className="text-xl font-bold text-white mb-2">{t.messages.noDungeons}</h3>
+                       <p className="text-slate-400">{t.messages.noDungeonsDesc}</p>
                     </div>
                   )}
                 </div>
@@ -1076,7 +1094,7 @@ export default function App() {
                         </div>
                         <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white">
                           <Camera className="w-8 h-8 mb-1" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider">Mudar</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider">{t.labels.changeAvatar}</span>
                           <input 
                             type="file" 
                             accept="image/png, image/jpeg" 
@@ -1087,9 +1105,9 @@ export default function App() {
                                 try {
                                   const base64 = await fileToDataURL(file);
                                   setUserStats(prev => ({ ...prev, avatarUrl: base64 }));
-                                  addNotification('Novo avatar equipado!', 'achievement');
+                                  addNotification(t.notifications.avatarUpdated, 'achievement');
                                 } catch (err) {
-                                  addNotification('Erro ao processar imagem.', 'error');
+                                  addNotification('Error processing image.', 'error');
                                 }
                               }
                             }}
@@ -1147,7 +1165,7 @@ export default function App() {
                     <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 space-y-4 shadow-xl">
                       <h4 className="font-bold flex items-center gap-2 text-white uppercase text-xs tracking-widest">
                         <Zap className="w-4 h-4 text-indigo-500" />
-                        Active Buffs
+                        {t.stats.activeBuffs}
                       </h4>
                       <div className="space-y-2">
                          {Object.entries(activeBuffs).map(([type, value]) => (
@@ -1156,7 +1174,7 @@ export default function App() {
                              <span className="text-emerald-400 font-bold">+{Math.round(((value as number) - 1) * 100)}%</span>
                            </div>
                          ))}
-                         {Object.keys(activeBuffs).length === 0 && <p className="text-slate-500 text-xs italic text-center py-2">Sem buffs ativos no momento.</p>}
+                         {Object.keys(activeBuffs).length === 0 && <p className="text-slate-500 text-xs italic text-center py-2">{t.stats.noBuffs}</p>}
                       </div>
                     </div>
                 </div>
@@ -1164,7 +1182,7 @@ export default function App() {
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-white/10 bg-white/[0.02]">
-                       <h3 className="font-bold text-white uppercase text-sm tracking-widest">Equipamento & Inventário</h3>
+                       <h3 className="font-bold text-white uppercase text-sm tracking-widest">{t.stats.inventory}</h3>
                     </div>
                     <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                       {userStats.inventory.map((item, idx) => (
@@ -1192,7 +1210,7 @@ export default function App() {
 
                   <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-white/10 bg-white/[0.02]">
-                      <h3 className="font-bold text-white uppercase text-xs tracking-widest leading-none">Façanhas Recentes</h3>
+                      <h3 className="font-bold text-white uppercase text-xs tracking-widest leading-none">{t.stats.recentFeats}</h3>
                     </div>
                     <div className="p-6 space-y-4">
                        {tasks.filter(t => t.completed).slice(-5).reverse().map(task => (
@@ -1226,13 +1244,13 @@ export default function App() {
                 {/* Sub-Navigation Menu */}
                 <div className="flex flex-wrap gap-2 bg-black/20 p-2 rounded-2xl border border-white/5 backdrop-blur-sm">
                   {[
-                    { id: 'areas', label: 'Especializações', icon: <LayoutDashboard className="w-3.5 h-3.5" />, desc: 'Gerencie áreas de foco e níveis de maestria.' },
-                    { id: 'xp', label: 'Status & Progressão', icon: <Zap className="w-3.5 h-3.5" />, desc: 'Configure curvas de XP e multiplicadores globais.' },
-                    { id: 'store', label: 'Mercado Negro', icon: <Store className="w-3.5 h-3.5" />, desc: 'Adicione itens e bônus para a loja de recompensas.' },
-                    { id: 'dungeons', label: 'Dungeon Architect', icon: <Sword className="w-3.5 h-3.5" />, desc: 'Crie grandes projetos divididos em etapas e recompensas.' },
-                    { id: 'titles', label: 'Forge de Títulos', icon: <Crown className="w-3.5 h-3.5" />, desc: 'Crie e gerencie títulos lendários com bônus exclusivos.' },
-                    { id: 'achievements', label: 'Conquistas', icon: <Trophy className="w-3.5 h-3.5" />, desc: 'Defina marcos lendários e desafios para o seu herói.' },
-                    { id: 'tasks', label: 'Sistema', icon: <Settings className="w-3.5 h-3.5" />, desc: 'Configurações técnicas e manutenção do sistema.' }
+                    { id: 'areas', label: t.managerTabs.areas, icon: <LayoutDashboard className="w-3.5 h-3.5" />, desc: 'Gerencie áreas de foco e níveis de maestria.' },
+                    { id: 'xp', label: t.managerTabs.xp, icon: <Zap className="w-3.5 h-3.5" />, desc: 'Configure curvas de XP e multiplicadores globais.' },
+                    { id: 'store', label: t.managerTabs.store, icon: <Store className="w-3.5 h-3.5" />, desc: 'Adicione itens e bônus para a loja de recompensas.' },
+                    { id: 'dungeons', label: t.managerTabs.dungeons, icon: <Sword className="w-3.5 h-3.5" />, desc: 'Crie grandes projetos divididos em etapas e recompensas.' },
+                    { id: 'titles', label: t.managerTabs.titles, icon: <Crown className="w-3.5 h-3.5" />, desc: 'Crie e gerencie títulos lendários com bônus exclusivos.' },
+                    { id: 'achievements', label: t.managerTabs.achievements, icon: <Trophy className="w-3.5 h-3.5" />, desc: 'Defina marcos lendários e desafios para o seu herói.' },
+                    { id: 'tasks', label: t.managerTabs.tasks, icon: <Settings className="w-3.5 h-3.5" />, desc: 'Configurações técnicas e manutenção do sistema.' }
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -1267,7 +1285,7 @@ export default function App() {
                     </div>
                     <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-tight flex items-center gap-3 relative z-10">
                        <LayoutDashboard className="w-5 h-5 text-indigo-400" />
-                       {editingArea ? 'Edit Specialization' : 'Specialization Workshop'}
+                       {editingArea ? t.actions.editDomain : t.actions.addDomain}
                     </h3>
                     <form className="space-y-4 relative z-10" onSubmit={(e) => {
                       e.preventDefault();
@@ -1305,13 +1323,13 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            Area Name
+                            {t.labels.areaName}
                             <InfoTooltip text="O nome da categoria ou especialização do seu herói." />
                           </label>
                           <input name="name" required defaultValue={editingArea?.name} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 font-medium" />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Icon</label>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.labels.icon}</label>
                           <select name="iconName" defaultValue={editingArea?.iconName || 'Star'} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-white appearance-none cursor-pointer text-xs font-bold">
                             <option value="Heart">Heart</option>
                             <option value="Users">Users</option>
@@ -1327,7 +1345,7 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Core Color</label>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.labels.color}</label>
                           <select name="color" defaultValue={editingArea?.color || 'indigo'} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-white appearance-none cursor-pointer text-xs font-bold">
                             <option value="rose">Rose (Red)</option>
                             <option value="blue">Blue</option>
@@ -1338,7 +1356,7 @@ export default function App() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            Scaling Type
+                            {t.labels.scalingType}
                             <InfoTooltip text="Como o XP necessário para o próximo nível aumenta. 'Percentage' é crescimento exponencial." />
                           </label>
                           <select name="scalingType" defaultValue={editingArea?.levelConfig.scalingType || 'fixed'} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-white appearance-none cursor-pointer text-[10px] font-bold">
@@ -1390,11 +1408,11 @@ export default function App() {
                       </div>
                       <div className="flex gap-4 pt-4">
                         <button type="submit" className="flex-1 py-3 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/40 text-indigo-100 rounded-xl font-bold transition-all uppercase tracking-widest text-[10px]">
-                          {editingArea ? 'Save Modifications' : 'Create Specialization'}
+                          {editingArea ? t.actions.save : t.actions.create}
                         </button>
                         {editingArea && (
                           <button type="button" onClick={() => setEditingArea(null)} className="py-3 px-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl font-bold transition-all uppercase tracking-widest text-[10px]">
-                            Discard
+                            {t.actions.discard}
                           </button>
                         )}
                       </div>
@@ -1406,35 +1424,82 @@ export default function App() {
                   <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-8 shadow-xl">
                     <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-tight flex items-center gap-3">
                        <Zap className="w-5 h-5 text-indigo-500" />
-                       Hero Basic Stats
+                       {t.labels.editProfile}
                     </h3>
 
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className="bg-black/20 p-4 rounded-xl border border-white/5">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Max Stamina</p>
-                        <div className="flex items-center gap-3">
-                          <input 
-                            type="number" 
-                            value={userStats.stamina.max} 
-                            onChange={(e) => setUserStats(prev => ({ ...prev, stamina: { ...prev.stamina, max: parseInt(e.target.value) || 100 } }))}
-                            className="bg-transparent border-b border-white/10 w-20 text-xl font-bold font-mono focus:border-indigo-500 outline-none"
-                          />
-                          <button onClick={() => setUserStats(prev => ({ ...prev, stamina: { ...prev.stamina, current: prev.stamina.max } }))} className="text-[9px] bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded border border-indigo-500/20 uppercase font-bold">Refill</button>
-                        </div>
-                      </div>
-                      <div className="bg-black/20 p-4 rounded-xl border border-white/5">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Current Gold</p>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5 shadow-inner">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">{t.stats.level}</p>
                         <input 
                           type="number" 
-                          value={userStats.money} 
+                          value={userStats.level ?? 1} 
+                          onChange={(e) => {
+                            const newLevel = parseInt(e.target.value) || 1;
+                            const config = userStats.levelConfig || { baseXP: 1000, scalingType: 'fixed', scalingValue: 0 };
+                            // Calculate XP required for this level
+                            let targetXP = 0;
+                            for (let i = 1; i < newLevel; i++) {
+                              targetXP += calculateLevelInfo(targetXP, config).nextLevelXP;
+                            }
+                            setUserStats(prev => ({ ...prev, level: newLevel, xp: targetXP }));
+                          }}
+                          className="bg-transparent border-b border-white/10 w-full text-2xl font-bold font-mono focus:border-indigo-500 outline-none text-indigo-400"
+                        />
+                      </div>
+                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5 shadow-inner">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">{t.labels.currentXP}</p>
+                        <input 
+                          type="number" 
+                          value={userStats.xp ?? 0} 
+                          onChange={(e) => setUserStats(prev => ({ ...prev, xp: parseInt(e.target.value) || 0 }))}
+                          className="bg-transparent border-b border-white/10 w-full text-2xl font-bold font-mono focus:border-indigo-500 outline-none text-white"
+                        />
+                      </div>
+                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5 shadow-inner">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">{t.stats.money}</p>
+                        <input 
+                          type="number" 
+                          value={userStats.money ?? 0} 
                           onChange={(e) => setUserStats(prev => ({ ...prev, money: parseInt(e.target.value) || 0 }))}
-                          className="bg-transparent border-b border-white/10 w-full text-xl font-bold font-mono focus:border-emerald-500 outline-none text-emerald-400"
+                          className="bg-transparent border-b border-white/10 w-full text-2xl font-bold font-mono focus:border-emerald-500 outline-none text-emerald-400"
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-4 pt-4 border-t border-white/5">
-                      <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Leveling System Algorithm</h4>
+                    <div className="grid grid-cols-2 gap-6 mb-10">
+                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5 shadow-inner relative group">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">{t.stats.stamina} ({t.labels.active})</p>
+                        <div className="flex items-center gap-4">
+                          <input 
+                            type="number" 
+                            value={userStats.stamina?.current ?? 0} 
+                            onChange={(e) => setUserStats(prev => ({ ...prev, stamina: { ...prev.stamina, current: parseInt(e.target.value) || 0 } }))}
+                            className="bg-transparent border-b border-white/10 w-full text-2xl font-bold font-mono focus:border-amber-500 outline-none text-amber-500"
+                          />
+                          <button 
+                            onClick={() => setUserStats(prev => ({ ...prev, stamina: { ...prev.stamina, current: prev.stamina.max } }))} 
+                            className="shrink-0 p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 hover:bg-amber-500/20 transition-all opacity-0 group-hover:opacity-100"
+                            title={t.actions.refill}
+                          >
+                            <Zap className="w-5 h-5 fill-current" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5 shadow-inner">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">{t.labels.maxStamina}</p>
+                        <input 
+                          type="number" 
+                          value={userStats.stamina?.max ?? 100} 
+                          onChange={(e) => setUserStats(prev => ({ ...prev, stamina: { ...prev.stamina, max: parseInt(e.target.value) || 100 } }))}
+                          className="bg-transparent border-b border-white/10 w-full text-2xl font-bold font-mono focus:border-indigo-500 outline-none text-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-6 pt-8 border-t border-white/5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-[0.2em]">{t.labels.levelScale}</h4>
+                      </div>
                       <div className="grid grid-cols-1 gap-4">
                         <div className="space-y-2">
                           <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
@@ -1815,7 +1880,7 @@ export default function App() {
                                   <div className="space-y-1">
                                     <label className="text-[8px] font-bold text-slate-600 uppercase">Room Name</label>
                                     <input 
-                                      value={room.name} 
+                                      value={room.name || ''} 
                                       onChange={(e) => {
                                         const newRooms = [...editingDungeon.rooms];
                                         newRooms[rIdx] = { ...room, name: e.target.value };
@@ -1883,7 +1948,7 @@ export default function App() {
                                     <button 
                                       type="button" 
                                       onClick={() => {
-                                        const newTask: DungeonTask = { id: Math.random().toString(36).substring(7), name: 'Nova Tarefa', difficulty: 'Easy', completed: false, xp: 50, money: 50, tags: [] };
+                                        const newTask: DungeonTask = { id: Math.random().toString(36).substring(7), name: 'Nova Tarefa', difficulty: 'Easy', completed: false, xp: 50, money: 50 };
                                         const newRooms = [...editingDungeon.rooms];
                                         newRooms[rIdx] = { ...room, tasks: [...room.tasks, newTask] };
                                         setEditingDungeon({ ...editingDungeon, rooms: newRooms });
@@ -1897,7 +1962,7 @@ export default function App() {
                                     {room.tasks.map((task, tIdx) => (
                                       <div key={task.id} className="flex gap-2 items-center bg-black/40 p-2 rounded-lg border border-white/5">
                                         <input 
-                                          value={task.name} 
+                                          value={task.name || ''} 
                                           onChange={(e) => {
                                             const newTasks = [...room.tasks];
                                             newTasks[tIdx] = { ...task, name: e.target.value };
@@ -1909,7 +1974,7 @@ export default function App() {
                                         />
                                         <input 
                                           type="number"
-                                          value={task.xp} 
+                                          value={task.xp ?? 0} 
                                           onChange={(e) => {
                                             const newTasks = [...room.tasks];
                                             newTasks[tIdx] = { ...task, xp: parseInt(e.target.value) || 0 };
@@ -2122,12 +2187,12 @@ export default function App() {
                       </div>
 
                       <div className="flex gap-4">
-                        <button type="submit" className="flex-1 py-4 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/40 text-indigo-100 rounded-xl font-bold transition-all mt-4 hover:border-indigo-500/60 shadow-lg active:scale-95 uppercase tracking-widest text-xs">
-                          {editingAchievement ? 'Rewrite Legend' : 'Forge Achievement'}
+                          <button type="submit" className="flex-1 py-4 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/40 text-indigo-100 rounded-xl font-bold transition-all mt-4 hover:border-indigo-500/60 shadow-lg active:scale-95 uppercase tracking-widest text-xs">
+                          {editingAchievement ? t.actions.edit : t.actions.create}
                         </button>
                         {editingAchievement && (
                           <button type="button" onClick={() => setEditingAchievement(null)} className="py-4 px-6 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl font-bold transition-all mt-4 uppercase tracking-widest text-xs">
-                            Discard
+                            {t.actions.discard}
                           </button>
                         )}
                       </div>
@@ -2141,7 +2206,7 @@ export default function App() {
                   <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-xl overflow-hidden">
                     <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest flex items-center gap-2">
                       <Sword className="w-4 h-4 text-indigo-400" />
-                      Expedition Logs
+                      {t.labels.expeditionLogs}
                     </h3>
                       <div className="space-y-3">
                          {dungeons.map(dungeon => (
@@ -2151,31 +2216,31 @@ export default function App() {
                               </div>
                               <div className="flex-1">
                                  <p className="font-bold text-white text-xs">{dungeon.name}</p>
-                                 <p className="text-[9px] text-slate-500 uppercase font-mono">{dungeon.rooms.length} Salas • {dungeon.isCompleted ? 'Cleared' : 'Active'}</p>
+                                 <p className="text-[9px] text-slate-500 uppercase font-mono">{dungeon.rooms.length} {t.labels.rooms} • {dungeon.isCompleted ? t.labels.cleared : t.labels.active}</p>
                               </div>
                               <div className="text-right shrink-0 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                  <button 
                                     onClick={() => setEditingDungeon(dungeon)} 
                                     className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/20 transition-all"
-                                    title="Edit Dungeon"
+                                    title={t.actions.edit}
                                  >
                                     <Settings className="w-4 h-4" />
                                  </button>
                                  <button 
                                     onClick={() => {
-                                      if(confirm(`Eradicate dungeon "${dungeon.name}"? All progress will be lost.`)) {
+                                      if(confirm(`${t.actions.delete} "${dungeon.name}"?`)) {
                                         setDungeons(prev => prev.filter(d => d.id !== dungeon.id));
                                       }
                                     }} 
                                     className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded-lg border border-rose-500/20 transition-all"
-                                    title="Remove Dungeon"
+                                    title={t.actions.delete}
                                  >
                                     <Trash2 className="w-4 h-4" />
                                  </button>
                               </div>
                            </div>
                          ))}
-                         {dungeons.length === 0 && <p className="text-center py-4 text-slate-500 text-xs italic">No dungeons registered in the logs.</p>}
+                         {dungeons.length === 0 && <p className="text-center py-4 text-slate-500 text-xs italic">{t.labels.noDungeonsRegistered}</p>}
                       </div>
                     </div>
                   )}
@@ -2184,7 +2249,7 @@ export default function App() {
                     <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-xl overflow-hidden border-indigo-500/10">
                       <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest flex items-center gap-2">
                         <LayoutDashboard className="w-4 h-4 text-indigo-400" />
-                        Current Domains
+                        {t.labels.domainList}
                       </h3>
                       <div className="space-y-3">
                          {areas.map(area => (
@@ -2225,7 +2290,7 @@ export default function App() {
 
                   {managerSubTab === 'store' && (
                     <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-xl overflow-hidden">
-                      <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest">Stock Inventory</h3>
+                      <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest">{t.labels.stockInventory}</h3>
                       <div className="space-y-3">
                          {storeItems.map(item => (
                            <div key={item.id} className="flex items-center gap-4 bg-black/40 p-4 rounded-xl border border-white/5 group hover:border-indigo-500/30 transition-all">
@@ -2265,7 +2330,7 @@ export default function App() {
 
                   {managerSubTab === 'achievements' && (
                     <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-xl overflow-hidden">
-                       <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest">Legends Bureau</h3>
+                       <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest">{t.labels.legendsBureau}</h3>
                       <div className="space-y-3">
                          {achievements.map(ach => (
                            <div key={ach.id} className="flex items-center gap-4 bg-black/40 p-4 rounded-xl border border-white/5 group hover:border-indigo-500/30 transition-all">
@@ -2306,12 +2371,37 @@ export default function App() {
                   )}
 
                   {managerSubTab === 'tasks' && (
-                    <div className="bg-rose-950/20 border border-rose-500/20 p-6 rounded-2xl backdrop-blur-sm shadow-xl">
+                    <div className="space-y-6">
+                      <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-indigo-500/10 p-6 shadow-xl relative overflow-hidden group">
+                        <h3 className="font-bold text-white mb-6 uppercase text-xs tracking-widest flex items-center gap-2">
+                           <Settings className="w-4 h-4 text-indigo-400" />
+                           {t.labels.language}
+                        </h3>
+                        <div className="grid grid-cols-3 gap-4">
+                           {(['en', 'pt', 'es'] as Language[]).map(lang => (
+                             <button
+                               key={lang}
+                               onClick={() => setLanguage(lang)}
+                               className={`py-4 px-2 rounded-xl border font-bold uppercase text-[10px] tracking-widest transition-all ${
+                                 language === lang 
+                                   ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' 
+                                   : 'bg-black/40 border-white/10 text-slate-400 hover:bg-white/5'
+                               }`}
+                             >
+                               {lang === 'en' && 'English'}
+                               {lang === 'pt' && 'Português'}
+                               {lang === 'es' && 'Español'}
+                             </button>
+                           ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-rose-950/20 border border-rose-500/20 p-6 rounded-2xl backdrop-blur-sm shadow-xl">
                        <h4 className="text-rose-400 font-bold mb-2 flex items-center gap-2 uppercase text-xs tracking-widest">
                          <AlertCircle className="w-4 h-4" />
-                         Danger Zone
+                         {t.labels.dangerZone}
                        </h4>
-                      <p className="text-rose-400/60 text-[10px] mb-4 uppercase font-bold tracking-wide">Resetting will permanently delete all task history and items.</p>
+                      <p className="text-rose-400/60 text-[10px] mb-4 uppercase font-bold tracking-wide">{t.labels.resetDesc}</p>
                       <button 
                         onClick={() => {
                           if (confirm('Delete all data?')) {
@@ -2321,9 +2411,10 @@ export default function App() {
                         }}
                         className="w-full px-4 py-3 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/30 text-rose-100 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all active:scale-95 shadow-lg"
                       >
-                        Reset Application State
+                        {t.labels.resetApp}
                       </button>
                     </div>
+                   </div>
                   )}
                 </div>
               </div>
@@ -2343,13 +2434,19 @@ export default function App() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 300, opacity: 0 }}
               className={`px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border flex items-center gap-4 max-w-sm
-                ${n.type === 'level' ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-100' : 'bg-amber-600/20 border-amber-500/30 text-amber-100'}
+                ${n.type === 'level' ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-100' : 
+                  n.type === 'achievement' ? 'bg-amber-600/20 border-amber-500/30 text-amber-100' :
+                  'bg-rose-600/20 border-rose-500/30 text-rose-100'}
               `}
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                ${n.type === 'level' ? 'bg-indigo-600 shadow-lg shadow-indigo-600/20' : 'bg-amber-500 shadow-lg shadow-amber-500/20'}
+                ${n.type === 'level' ? 'bg-indigo-600 shadow-lg shadow-indigo-600/20' : 
+                  n.type === 'achievement' ? 'bg-amber-500 shadow-lg shadow-amber-500/20' :
+                  'bg-rose-500 shadow-lg shadow-rose-500/20'}
               `}>
-                {n.type === 'level' ? <Zap className="w-5 h-5 text-white" /> : <Trophy className="w-5 h-5 text-white" />}
+                {n.type === 'level' ? <Zap className="w-5 h-5 text-white" /> : 
+                 n.type === 'achievement' ? <Trophy className="w-5 h-5 text-white" /> :
+                 <AlertCircle className="w-5 h-5 text-white" />}
               </div>
               <p className="text-sm font-bold leading-tight">{n.message}</p>
               <button 
@@ -2368,13 +2465,13 @@ export default function App() {
              <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center shadow-lg shadow-indigo-600/20">
                <Plus className="w-4 h-4 text-white" />
              </div>
-             Create New Mission
+             {t.actions.createTask}
            </h3>
            <form method="dialog">
              <button className="w-8 h-8 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-slate-400 hover:text-white transition-all">✕</button>
            </form>
         </div>
-        <div className="p-8">
+        <div className="p-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
             <form id="form-add-task" onSubmit={(e) => {
              e.preventDefault();
              const formData = new FormData(e.currentTarget);
@@ -2387,11 +2484,11 @@ export default function App() {
 
              addTask({
                name: formData.get('name') as string,
+               description: formData.get('description') as string,
                xp: parseInt(formData.get('xp') as string),
                money: parseInt(formData.get('money') as string),
                difficulty: formData.get('difficulty') as Difficulty,
                priority: (formData.get('priority') as any) || 'None',
-               tags: (formData.get('tags') as string).split(',').map(t => t.trim()).filter(Boolean),
                dueDate: (formData.get('dueDate') as string) || undefined,
                areaXP,
                staminaCost: parseInt(formData.get('staminaCost') as string) || 0,
@@ -2402,13 +2499,18 @@ export default function App() {
              (e.target as any).reset();
            }} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Quest Name</label>
-                <input name="name" required autoFocus className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all font-medium placeholder:text-slate-700 shadow-inner" placeholder="e.g. Slay the Project Dragon" />
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.taskName}</label>
+                <input name="name" required autoFocus className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all font-medium placeholder:text-slate-700 shadow-inner" placeholder={t.labels.taskName} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.taskDescription}</label>
+                <textarea name="description" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all font-medium placeholder:text-slate-700 shadow-inner min-h-[100px]" placeholder={t.labels.taskDescription} />
               </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Target Area</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.targetArea}</label>
                   <select name="area" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 appearance-none cursor-pointer font-medium">
                     <option value="General">General</option>
                     {areas.map(area => (
@@ -2417,7 +2519,7 @@ export default function App() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Stamina Cost</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.stats.stamina}</label>
                   <div className="relative">
                     <Battery className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-rose-500/50" />
                     <input name="staminaCost" type="number" required defaultValue="10" className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 font-mono" />
@@ -2427,14 +2529,14 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Reward (XP)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.rewardXp}</label>
                   <div className="relative">
                     <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500/50" />
                     <input name="xp" type="number" required defaultValue="100" className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Reward (Gold)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.rewardGold}</label>
                   <div className="relative">
                     <Coins className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500/50" />
                     <input name="money" type="number" required defaultValue="50" className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono" />
@@ -2444,36 +2546,36 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Difficulty Rank</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.rank}</label>
                   <select name="difficulty" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 appearance-none cursor-pointer font-medium">
-                    <option value="Easy">Easy (Noob)</option>
-                    <option value="Medium">Medium (Adept)</option>
-                    <option value="Hard">Hard (Expert)</option>
-                    <option value="Elite">Elite (Legend)</option>
+                    <option value="Easy">{t.rankNames.easy}</option>
+                    <option value="Medium">{t.rankNames.medium}</option>
+                    <option value="Hard">{t.rankNames.hard}</option>
+                    <option value="Elite">{t.rankNames.elite}</option>
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Task Priority</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.priority}</label>
                   <select name="priority" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 appearance-none cursor-pointer font-medium">
-                    <option value="None">Normal</option>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Urgent">Urgent</option>
+                    <option value="None">{t.priorityNames.none}</option>
+                    <option value="Low">{t.priorityNames.low}</option>
+                    <option value="Medium">{t.priorityNames.medium}</option>
+                    <option value="High">{t.priorityNames.high}</option>
+                    <option value="Urgent">{t.priorityNames.urgent}</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Repeating Task</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.repeatingTask}</label>
                   <div className="flex items-center gap-4 bg-black/40 border border-white/10 rounded-xl px-4 py-4">
                     <input name="isRepeating" type="checkbox" className="w-5 h-5 accent-indigo-500 rounded border-white/10" />
-                    <span className="text-sm font-medium text-slate-300">Respawns?</span>
+                    <span className="text-sm font-medium text-slate-300">{t.labels.respawns}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Interval (Days)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{t.labels.intervalDays}</label>
                   <div className="relative">
                     <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                     <input name="repeatInterval" type="number" defaultValue="1" min="1" className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-mono" />
@@ -2481,19 +2583,11 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Tags (comma-separated)</label>
-                <div className="relative">
-                  <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input name="tags" className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium placeholder:text-slate-700" placeholder="Focus, Work, Health" />
-                </div>
-              </div>
-
               <div className="pt-4 flex gap-4">
                  <div className="flex-1 text-xs">
-                   <button type="button" onClick={() => (document.getElementById('modal-add-task') as any)?.close()} className="w-full py-4 bg-white/5 border border-white/10 rounded-xl font-bold hover:bg-white/10 text-slate-400 hover:text-white transition-all uppercase tracking-widest">Abort</button>
+                   <button type="button" onClick={() => (document.getElementById('modal-add-task') as any)?.close()} className="w-full py-4 bg-white/5 border border-white/10 rounded-xl font-bold hover:bg-white/10 text-slate-400 hover:text-white transition-all uppercase tracking-widest">{t.actions.abort}</button>
                  </div>
-                 <button type="submit" className="flex-[2] py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-xl shadow-indigo-600/30 active:scale-95 transition-all text-sm uppercase tracking-[0.15em]">Publish Mission</button>
+                 <button type="submit" className="flex-[2] py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-xl shadow-indigo-600/30 active:scale-95 transition-all text-sm uppercase tracking-[0.15em]">{t.actions.publish}</button>
               </div>
            </form>
         </div>
@@ -3060,10 +3154,25 @@ function StatCard({ label, value, subValue, icon, color }: { label: string, valu
   );
 }
 
-function TaskRow({ task, onComplete }: { task: Task; onComplete: () => void; key?: string | number }) {
+function TaskRow({ task, t, onComplete }: { task: Task; t: TranslationSchema; onComplete: () => void; key?: string | number }) {
   const colorClass = DIFFICULTY_COLORS[task.difficulty];
   const priorityClass = PRIORITY_COLORS[task.priority || 'None'];
   
+  const translatedDifficulty = {
+    'Easy': t.rankNames.easy,
+    'Medium': t.rankNames.medium,
+    'Hard': t.rankNames.hard,
+    'Elite': t.rankNames.elite
+  }[task.difficulty];
+
+  const translatedPriority = {
+    'None': t.priorityNames.none,
+    'Low': t.priorityNames.low,
+    'Medium': t.priorityNames.medium,
+    'High': t.priorityNames.high,
+    'Urgent': t.priorityNames.urgent
+  }[task.priority || 'None'];
+
   return (
     <div className="p-4 md:p-6 flex flex-col md:flex-row md:items-center gap-6 hover:bg-white/[0.04] transition-all group backdrop-blur-[2px]">
       <div className="flex items-center gap-4 flex-1">
@@ -3079,17 +3188,17 @@ function TaskRow({ task, onComplete }: { task: Task; onComplete: () => void; key
           <div className="flex flex-wrap items-center gap-3">
             <h4 className={`text-lg font-bold text-white group-hover:text-amber-400 transition-colors uppercase tracking-tight ${task.completed ? 'line-through opacity-50' : ''}`}>{task.name}</h4>
             <span className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-widest ${colorClass}`}>
-              {task.difficulty}
+              {translatedDifficulty}
             </span>
             {task.priority !== 'None' && (
               <span className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-widest ${priorityClass}`}>
-                {task.priority}
+                {translatedPriority}
               </span>
             )}
             {task.isRepeating && (
               <span className="px-2 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
                 <Clock className="w-2.5 h-2.5" />
-                Repeating
+                {t.labels.repeating}
               </span>
             )}
             {task.areaXP && Object.keys(task.areaXP).length > 0 && (
@@ -3114,18 +3223,15 @@ function TaskRow({ task, onComplete }: { task: Task; onComplete: () => void; key
                   <span>{task.staminaCost > 0 ? `-${task.staminaCost}` : `+${Math.abs(task.staminaCost)}`}</span>
                </div>
              )}
-             {task.tags.map(tag => (
-               <span key={tag} className="flex items-center gap-1 text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-full border border-white/5 uppercase font-medium">
-                 <Tag className="w-2.5 h-2.5" />
-                 {tag}
-               </span>
-             ))}
           </div>
+          {task.description && (
+            <p className="text-xs text-slate-400 mt-2 line-clamp-2 italic">{task.description}</p>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-between md:justify-end gap-4 pl-14 md:pl-0">
          <button onClick={onComplete} className="md:opacity-0 group-hover:opacity-100 bg-amber-500 hover:bg-amber-400 text-black px-4 py-2 rounded-lg text-xs font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/20">
-           CLAIM CONTRACT
+           {t.labels.claimContract}
          </button>
       </div>
     </div>
