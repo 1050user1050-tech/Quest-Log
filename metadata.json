@@ -1,0 +1,6 @@
+{
+  "name": "QuestLog: Gamified Task Manager",
+  "description": "A gamified task management system with XP, currency, difficulty levels, and a buff-providing item shop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
