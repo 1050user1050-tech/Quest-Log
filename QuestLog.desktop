@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=QuestLog
+Comment=Gamified Quest & Task Manager
+Exec=sh -c "cd $(dirname %k) && ./questlog-linux.sh"
+Icon=icon.svg
+Terminal=false
+Type=Application
+Categories=Office;Utility;

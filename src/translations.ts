@@ -110,6 +110,11 @@ export interface TranslationSchema {
     editProfile: string;
     baseStats: string;
     currentXP: string;
+    backup: string;
+    exportData: string;
+    importData: string;
+    autoSave: string;
+    linuxHelp: string;
   };
   messages: {
     welcome: string;
@@ -146,6 +151,8 @@ export interface TranslationSchema {
     taskCompleted: string;
     savingChanges: string;
     avatarUpdated: string;
+    importSuccess: string;
+    importError: string;
   }
 }
 
@@ -258,7 +265,12 @@ export const translations: Record<Language, TranslationSchema> = {
       noDungeonsRegistered: "No dungeons registered in the logs.",
       editProfile: "Edit Hero Profile",
       baseStats: "Core Stats",
-      currentXP: "Current XP"
+      currentXP: "Current XP",
+      backup: "Data Backup",
+      exportData: "Download Backup File",
+      importData: "Restore from File",
+      autoSave: "Auto-save enabled (Local Storage)",
+      linuxHelp: "How to run on Linux Mint: 1. Click the menu (three dots) and choose 'Export to GitHub/ZIP'. 2. Extract the file to your Home or Documents folder. 3. Open terminal in the folder and type: bash questlog-linux.sh"
     },
     messages: {
       welcome: "WELCOME TO QUESTLOG",
@@ -294,7 +306,9 @@ export const translations: Record<Language, TranslationSchema> = {
       noMoney: "Not enough gold!",
       taskCompleted: "Quest Complete!",
       savingChanges: "Changes saved to the matrix.",
-      avatarUpdated: "Avatar updated!"
+      avatarUpdated: "Avatar updated!",
+      importSuccess: "Data restored successfully!",
+      importError: "Failed to restore data. Invalid file format."
     }
   },
   pt: {
@@ -405,7 +419,12 @@ export const translations: Record<Language, TranslationSchema> = {
       noDungeonsRegistered: "Nenhuma masmorra registrada nos logs.",
       editProfile: "Editar Perfil de Herói",
       baseStats: "Status Principais",
-      currentXP: "XP Atual"
+      currentXP: "XP Atual",
+      backup: "Backup de Dados",
+      exportData: "Baixar Arquivo de Backup",
+      importData: "Restaurar de Arquivo",
+      autoSave: "Auto-salvamento ativado (Local Storage)",
+      linuxHelp: "Como rodar no Linux Mint: 1. Clique nos três pontos (menu) e escolha 'Export to GitHub/ZIP'. 2. Extraia o arquivo para sua pasta Pessoal (Home) ou Documentos. 3. Abra o terminal na pasta e digite: bash questlog-linux.sh"
     },
     messages: {
       welcome: "BEM-VINDO AO QUESTLOG",
@@ -441,7 +460,9 @@ export const translations: Record<Language, TranslationSchema> = {
       noMoney: "Ouro insuficiente!",
       taskCompleted: "Missão Concluída!",
       savingChanges: "Alterações salvas na matriz.",
-      avatarUpdated: "Avatar atualizado!"
+      avatarUpdated: "Avatar atualizado!",
+      importSuccess: "Dados restaurados com sucesso!",
+      importError: "Falha ao restaurar dados. Formato de arquivo inválido."
     }
   },
   es: {
@@ -552,7 +573,12 @@ export const translations: Record<Language, TranslationSchema> = {
       noDungeonsRegistered: "No hay mazmorras registradas en los logs.",
       editProfile: "Editar Perfil de Héroe",
       baseStats: "Estadísticas Principales",
-      currentXP: "XP Actual"
+      currentXP: "XP Actual",
+      backup: "Copia de Seguridad",
+      exportData: "Descargar Archivo de Respaldo",
+      importData: "Restaurar desde Archivo",
+      autoSave: "Autoguardado activado (Local Storage)",
+      linuxHelp: "Cómo ejecutar en Linux Mint: 1. Haz clic en el menú (tres puntos) y elige 'Export to GitHub/ZIP'. 2. Extrae el archivo en tu Carpeta Personal (Home) o Documentos. 3. Abre la terminal en la carpeta y escribe: bash questlog-linux.sh"
     },
     messages: {
       welcome: "BIENVENIDO A QUESTLOG",
@@ -588,7 +614,9 @@ export const translations: Record<Language, TranslationSchema> = {
       noMoney: "¡Oro insuficiente!",
       taskCompleted: "¡Misión Completada!",
       savingChanges: "Cambios guardados en la matriz.",
-      avatarUpdated: "¡Avatar actualizado!"
+      avatarUpdated: "¡Avatar actualizado!",
+      importSuccess: "¡Datos restaurados con éxito!",
+      importError: "Error al restaurar los datos. Formato de archivo inválido."
     }
   }
 };

@@ -38,7 +38,8 @@ import {
   HelpCircle,
   Minus,
   Upload,
-  Camera
+  Camera,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language, TranslationSchema } from './translations';
@@ -715,6 +716,51 @@ export default function App() {
       id: 'a-' + Math.random().toString(36).substring(7)
     };
     setAchievements([...achievements, newAchievement]);
+  };
+
+  const handleExport = () => {
+    const data = {
+      tasks,
+      storeItems,
+      achievements,
+      areas,
+      userStats,
+      language,
+      titles,
+      dungeons
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `questlog_backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.tasks) setTasks(data.tasks);
+        if (data.storeItems) setStoreItems(data.storeItems);
+        if (data.achievements) setAchievements(data.achievements);
+        if (data.areas) setAreas(data.areas);
+        if (data.userStats) setUserStats(data.userStats);
+        if (data.language) setLanguage(data.language);
+        if (data.titles) setTitles(data.titles);
+        if (data.dungeons) setDungeons(data.dungeons);
+        
+        addNotification(t.notifications.importSuccess, 'achievement');
+      } catch (err) {
+        addNotification(t.notifications.importError, 'error');
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -2393,6 +2439,34 @@ export default function App() {
                                {lang === 'es' && 'Español'}
                              </button>
                            ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-xl space-y-4">
+                        <h3 className="font-bold text-white uppercase text-xs tracking-widest flex items-center gap-2">
+                           <Upload className="w-4 h-4 text-emerald-400" />
+                           {t.labels.backup}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{t.labels.autoSave}</p>
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg">
+                          <p className="text-[9px] text-indigo-300 leading-relaxed font-medium">
+                            <Info className="w-3 h-3 inline mr-1" />
+                            {t.labels.linuxHelp}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <button 
+                            onClick={handleExport}
+                            className="flex items-center justify-center gap-2 py-3 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                          >
+                            <Plus className="w-4 h-4 rotate-45" /> 
+                            {t.labels.exportData}
+                          </button>
+                          <label className="flex items-center justify-center gap-2 py-3 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer text-center">
+                            <Upload className="w-4 h-4" />
+                            {t.labels.importData}
+                            <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                          </label>
                         </div>
                       </div>
 
