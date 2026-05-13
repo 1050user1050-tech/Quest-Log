@@ -5,8 +5,22 @@ echo --- QuestLog Windows Launcher ---
 :: Check for Node.js
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Node.js is not installed!
-    echo Please download and install it from https://nodejs.org/
+    echo Node.js is not installed!
+    echo Attempting to install Node.js via winget...
+    
+    winget --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo Winget not found. Please download Node.js manually from https://nodejs.org/
+        pause
+        exit /b
+    )
+
+    echo Downloading and installing Node.js (LTS)...
+    winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
+    
+    echo.
+    echo Node.js installation finished. 
+    echo PLEASE RESTART THIS SCRIPT to recognize the new environment variables.
     pause
     exit /b
 )
